@@ -27,6 +27,18 @@ namespace CS432_Client
             InitializeComponent();
         }
 
+        static byte[] hashWithSHA256(string input)
+        {
+            // convert input string to byte array
+            byte[] byteInput = Encoding.Default.GetBytes(input);
+            // create a hasher object from System.Security.Cryptography
+            SHA256CryptoServiceProvider sha256Hasher = new SHA256CryptoServiceProvider();
+            // hash and save the resulting byte array
+            byte[] result = sha256Hasher.ComputeHash(byteInput);
+
+            return result;
+        }
+
         public void Reset()
         {
             textBox_Username.Text = "";
@@ -51,10 +63,16 @@ namespace CS432_Client
             {
                 try
                 {
+                    string str = textBox_Username.Text;
                     clientSocket.Connect(IP, port);
                     ConnectBtn.Enabled = false;
                     connected = true;
                     textBox_Status.AppendText("Connected to server\n");
+                    byte[] sha256 = hashWithSHA256(textBox_Password.Text);
+                    byte[] newsha256 = sha256.Take(16).ToArray();
+                    byte[] bytes = Encoding.ASCII.GetBytes(str);
+                    byte[] sendbytes = newsha256.Concat(bytes).ToArray();
+                    clientSocket.Send(sendbytes);
 
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
                     receiveThread.Start();
