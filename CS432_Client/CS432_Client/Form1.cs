@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Security.Cryptography;
 
 
 namespace CS432_Client
@@ -46,8 +47,8 @@ namespace CS432_Client
             textBox_IP.Text = "";
             textBox_Port.Text = "";
         }
-                
-        private void ConnectBtn_Click(object sender, EventArgs e)
+
+        private void startClient()
         {
             clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             string IP = textBox_IP.Text;
@@ -65,9 +66,10 @@ namespace CS432_Client
                 {
                     string str = textBox_Username.Text;
                     clientSocket.Connect(IP, port);
-                    ConnectBtn.Enabled = false;
+                    ConnectBtn.Text = "Disconnected";
                     connected = true;
                     textBox_Status.AppendText("Connected to server\n");
+
                     byte[] sha256 = hashWithSHA256(textBox_Password.Text);
                     byte[] newsha256 = sha256.Take(16).ToArray();
                     byte[] bytes = Encoding.ASCII.GetBytes(str);
@@ -93,7 +95,26 @@ namespace CS432_Client
                 MessageBox.Show(message);
                 return;
             }
+        }
 
+        private void stopClient()
+        {
+            connected = false;
+            clientSocket.Close();
+            textBox_Status.AppendText("Disconnected from server\n");
+            ConnectBtn.Text = "Connect";
+        }
+                
+        private void ConnectBtn_Click(object sender, EventArgs e)
+        {
+            if (!connected)
+            {
+                startClient();
+            }
+            else
+            {
+                stopClient();
+            }
         }
 
         private void Receive()
