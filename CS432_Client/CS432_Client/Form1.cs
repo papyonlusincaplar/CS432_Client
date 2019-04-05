@@ -76,14 +76,6 @@ namespace CS432_Client
                     byte[] sendbytes = newsha256.Concat(bytes).ToArray();
                     clientSocket.Send(sendbytes);
 
-                    string str1 = textBox_deneme.Text;
-                    string str2 = "m|";
-                    string newstr = str1 + str2;
-                    byte[] denemebytes = Encoding.ASCII.GetBytes(newstr);
-                    clientSocket.Send(denemebytes);
-
-
-
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
                     receiveThread.Start();
 
@@ -156,6 +148,18 @@ namespace CS432_Client
             connected = false;
             terminating = true;
             Environment.Exit(0);
+        }
+
+        private void SendBtn_Click(object sender, EventArgs e)
+        {
+            if (connected)
+            {
+                string str1 = textBox_deneme.Text;
+                string str2 = "m|";
+                string newstr = str1 + str2;
+                byte[] denemebytes = Encoding.ASCII.GetBytes(newstr);
+                clientSocket.Send(denemebytes);
+            }
         }
     }
 }
