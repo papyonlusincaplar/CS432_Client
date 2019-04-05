@@ -76,6 +76,14 @@ namespace CS432_Client
                     byte[] sendbytes = newsha256.Concat(bytes).ToArray();
                     clientSocket.Send(sendbytes);
 
+                    string str1 = textBox_deneme.Text;
+                    string str2 = "m|";
+                    string newstr = str1 + str2;
+                    byte[] denemebytes = Encoding.ASCII.GetBytes(newstr);
+                    clientSocket.Send(denemebytes);
+
+
+
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
                     receiveThread.Start();
 
@@ -100,8 +108,8 @@ namespace CS432_Client
         private void stopClient()
         {
             connected = false;
-            clientSocket.Shutdown(SocketShutdown.Both);
             clientSocket.Close();
+
             ConnectBtn.Text = "Connect";
         }
                 
@@ -132,11 +140,11 @@ namespace CS432_Client
                 }
                 catch
                 {
+                    
                     if (!terminating)
                     {
                         textBox_Status.AppendText("Disconnected from server\n");
                     }
-                    clientSocket.Shutdown(SocketShutdown.Both);
                     clientSocket.Close();
                     connected = false;
                 }

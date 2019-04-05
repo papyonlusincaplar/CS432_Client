@@ -38,6 +38,8 @@
             this.textBox_Port = new System.Windows.Forms.TextBox();
             this.ConnectBtn = new System.Windows.Forms.Button();
             this.textBox_Status = new System.Windows.Forms.TextBox();
+            this.textBox_deneme = new System.Windows.Forms.TextBox();
+            this.SendBtn = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // label1
@@ -107,7 +109,7 @@
             // 
             // ConnectBtn
             // 
-            this.ConnectBtn.Location = new System.Drawing.Point(34, 205);
+            this.ConnectBtn.Location = new System.Drawing.Point(34, 227);
             this.ConnectBtn.Name = "ConnectBtn";
             this.ConnectBtn.Size = new System.Drawing.Size(175, 46);
             this.ConnectBtn.TabIndex = 8;
@@ -124,11 +126,29 @@
             this.textBox_Status.Size = new System.Drawing.Size(142, 220);
             this.textBox_Status.TabIndex = 9;
             // 
+            // textBox_deneme
+            // 
+            this.textBox_deneme.Location = new System.Drawing.Point(34, 193);
+            this.textBox_deneme.Name = "textBox_deneme";
+            this.textBox_deneme.Size = new System.Drawing.Size(100, 20);
+            this.textBox_deneme.TabIndex = 10;
+            // 
+            // SendBtn
+            // 
+            this.SendBtn.Location = new System.Drawing.Point(140, 191);
+            this.SendBtn.Name = "SendBtn";
+            this.SendBtn.Size = new System.Drawing.Size(75, 23);
+            this.SendBtn.TabIndex = 11;
+            this.SendBtn.Text = "Send";
+            this.SendBtn.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(397, 285);
+            this.Controls.Add(this.SendBtn);
+            this.Controls.Add(this.textBox_deneme);
             this.Controls.Add(this.textBox_Status);
             this.Controls.Add(this.ConnectBtn);
             this.Controls.Add(this.textBox_Port);
@@ -158,6 +178,8 @@
         private System.Windows.Forms.TextBox textBox_Port;
         private System.Windows.Forms.Button ConnectBtn;
         private System.Windows.Forms.TextBox textBox_Status;
+        private System.Windows.Forms.TextBox textBox_deneme;
+        private System.Windows.Forms.Button SendBtn;
     }
 }
 
