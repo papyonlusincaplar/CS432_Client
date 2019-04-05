@@ -100,6 +100,7 @@ namespace CS432_Client
         private void stopClient()
         {
             connected = false;
+            clientSocket.Shutdown(SocketShutdown.Both);
             clientSocket.Close();
             ConnectBtn.Text = "Connect";
         }
@@ -135,6 +136,7 @@ namespace CS432_Client
                     {
                         textBox_Status.AppendText("Disconnected from server\n");
                     }
+                    clientSocket.Shutdown(SocketShutdown.Both);
                     clientSocket.Close();
                     connected = false;
                 }
