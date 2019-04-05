@@ -66,7 +66,7 @@ namespace CS432_Client
                 {
                     string str = textBox_Username.Text;
                     clientSocket.Connect(IP, port);
-                    ConnectBtn.Text = "Disconnected";
+                    ConnectBtn.Text = "Disconnect";
                     connected = true;
                     textBox_Status.AppendText("Connected to server\n");
 
@@ -101,7 +101,6 @@ namespace CS432_Client
         {
             connected = false;
             clientSocket.Close();
-            textBox_Status.AppendText("Disconnected from server\n");
             ConnectBtn.Text = "Connect";
         }
                 
@@ -134,7 +133,7 @@ namespace CS432_Client
                 {
                     if (!terminating)
                     {
-                        textBox_Status.AppendText("The server has disconnected\n");
+                        textBox_Status.AppendText("Disconnected from server\n");
                     }
                     clientSocket.Close();
                     connected = false;
