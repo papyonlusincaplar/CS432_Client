@@ -156,7 +156,7 @@ namespace CS432_Client
             {
                 string str1 = textBox_deneme.Text;
                 string str2 = "m|";
-                string newstr = str1 + str2;
+                string newstr = str2 + str1;
                 byte[] denemebytes = Encoding.ASCII.GetBytes(newstr);
                 clientSocket.Send(denemebytes);
             }
