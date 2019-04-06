@@ -12,7 +12,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Security.Cryptography;
 
-
 namespace CS432_Client
 {
     public partial class Form1 : Form
@@ -69,24 +68,31 @@ namespace CS432_Client
                     {
                         key = fileReader.ReadLine();
                     }
-                    string sample = Encoding.UTF8.GetString(sendbytes, 0, sendbytes.Length);
-                    byte[] encryptedRSA = encryptWithRSA(sample, 3072, key);
+                    string mes = Encoding.UTF8.GetString(sendbytes, 0, sendbytes.Length);
+                    byte[] encryptedRSA = encryptWithRSA(mes, 3072, key);
                     clientSocket.Send(encryptedRSA);
 
-                    /*
-                    string a = generateHexStringFromByteArray(encryptedRSA);
-                    string chestr = Encoding.UTF8.GetString(encryptedRSA, 0, encryptedRSA.Length);
-                    byte[] decryptedRSA = decryptWithRSA(chestr, 3072, key);
-                    string b = generateHexStringFromByteArray(decryptedRSA);
-                    int x=10;
-                    if (a == b)
+                    byte[] buffer = new Byte[1024];
+                    clientSocket.Receive(buffer);
+                    byte[] sign = buffer.Take(384).ToArray();
+                    byte[] message = buffer.Skip(384).Take(buffer.Length-384).ToArray();
+                    string messadfPar = Encoding.UTF8.GetString(message, 0, sendbytes.Length);
+
+                    string verKey;
+                    using (System.IO.StreamReader fileReader =
+                    new System.IO.StreamReader(@"C:\Users\Vixie\Documents\Visual Studio 2012\Projects\repos\CS432_Client\server_signing_verification_pub.txt"))
                     {
-                        x = 1;
+                        verKey = fileReader.ReadLine();
+                    }
+                    if (verifyWithRSA(messadfPar, 3072, verKey, sign))
+                    {
+                        //enroll
                     }
                     else
-                        x = 0;
-                    */
-                             
+                    {
+                        return;
+                    }
+                  
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
                     receiveThread.Start();
                     
@@ -112,8 +118,8 @@ namespace CS432_Client
         private void stopClient()
         {
             connected = false;
+            clientSocket.Disconnect(false);
             clientSocket.Close();
-
             ConnectBtn.Text = "Connect";
         }
                 
@@ -149,6 +155,7 @@ namespace CS432_Client
                     {
                         textBox_Status.AppendText("Disconnected from server\n");
                     }
+                    clientSocket.Disconnect(false);
                     clientSocket.Close();
                     connected = false;
                 }
@@ -173,20 +180,20 @@ namespace CS432_Client
             terminating = true;
             Environment.Exit(0);
         }
-
-        static byte[] decryptWithRSA(string input, int algoLength, string xmlStringKey)
+        
+        static bool verifyWithRSA(string input, int algoLength, string xmlString, byte[] signature)
         {
             // convert input string to byte array
             byte[] byteInput = Encoding.Default.GetBytes(input);
             // create RSA object from System.Security.Cryptography
             RSACryptoServiceProvider rsaObject = new RSACryptoServiceProvider(algoLength);
             // set RSA object with xml string
-            rsaObject.FromXmlString(xmlStringKey);
-            byte[] result = null;
+            rsaObject.FromXmlString(xmlString);
+            bool result = false;
 
             try
             {
-                result = rsaObject.Decrypt(byteInput, true);
+                result = rsaObject.VerifyData(byteInput, "SHA256", signature);
             }
             catch (Exception e)
             {
@@ -195,6 +202,7 @@ namespace CS432_Client
 
             return result;
         }
+
 
         static byte[] encryptWithRSA(string input, int algoLength, string xmlStringKey)
         {
@@ -247,3 +255,6 @@ namespace CS432_Client
         }
     }
 }
+
+
+
