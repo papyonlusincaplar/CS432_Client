@@ -58,7 +58,7 @@ namespace CS432_Client
                     textBox_Status.AppendText("Connected to server\n");
 
 
-                    //RSA ENCRYPTION
+                    //RSA ENCRYPTION SEND
 
                     try
                     {
@@ -84,7 +84,7 @@ namespace CS432_Client
                     }
 
                    
-                   //SIGN VERIFICATION
+                   //SIGN VERIFICATION RECEIVE
 
                     try
                     {
@@ -96,7 +96,7 @@ namespace CS432_Client
                         }
                         buffer = buffer.Take(recievedbytes).ToArray();
                         byte[] sign = buffer.Take(384).ToArray();
-                        byte[] message = buffer.Skip(384).Take(buffer.Length - 384).ToArray();
+                        byte[] message = buffer.Skip(384).ToArray();
                         string messagefirstParam = Encoding.UTF8.GetString(message, 0, message.Length);
 
                         string verKey;
@@ -128,9 +128,11 @@ namespace CS432_Client
                     {
                         MessageBox.Show(this, "(Exception)Sign Verification Failed", "Failure", MessageBoxButtons.OK);
                     }
-                    
+                   
+
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
                     receiveThread.Start();
+
                 }
                 catch
                 {
@@ -170,8 +172,32 @@ namespace CS432_Client
         }
         private void LoginBtn_Click(object sender, EventArgs e)
         {
-            string userstr = textBox_Username.Text;
+            try
+            {
+                //SEND USERNAME WITH AUTHENTICATOR
+                string userstr = textBox_Username.Text;
+                string autcator = "a|";
+                string fstr = autcator + userstr;
+                byte[] bytes = Encoding.ASCII.GetBytes(fstr);
+                clientSocket.Send(bytes);
 
+                // 128 BIT NUMBER RECEIVE & SEND
+                byte[] buffer128 = new Byte[2048];
+                int recievedbytes128 = clientSocket.Receive(buffer128);
+                if (recievedbytes128 == 0)
+                {
+                    MessageBox.Show(this, "Error with getting the 128-bit number.", "Failure", MessageBoxButtons.OK);
+                }
+                byte[] sha256OfPass = hashWithSHA256(textBox_Password.Text);
+                byte[] upperhalfsha256 = sha256OfPass.Skip(16).ToArray();
+                string hashstrOf128 = Encoding.UTF8.GetString(buffer128, 0, buffer128.Length);
+                byte[] hmacsha256 = applyHMACwithSHA256(hashstrOf128, upperhalfsha256);
+                clientSocket.Send(hmacsha256);
+            }
+            catch
+            {
+                MessageBox.Show(this, "Something wrong with authentication", "Failure", MessageBoxButtons.OK);
+            }
         }
 
         private void Receive()
@@ -206,6 +232,18 @@ namespace CS432_Client
             connected = false;
             terminating = true;
             Environment.Exit(0);
+        }
+
+        static byte[] applyHMACwithSHA256(string input, byte[] key)
+        {
+            // convert input string to byte array
+            byte[] byteInput = Encoding.Default.GetBytes(input);
+            // create HMAC applier object from System.Security.Cryptography
+            HMACSHA256 hmacSHA256 = new HMACSHA256(key);
+            // get the result of HMAC operation
+            byte[] result = hmacSHA256.ComputeHash(byteInput);
+
+            return result;
         }
 
         static byte[] decryptWithRSA(string input, int algoLength, string xmlStringKey)
