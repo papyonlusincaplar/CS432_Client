@@ -28,18 +28,6 @@ namespace CS432_Client
             InitializeComponent();
         }
 
-        static byte[] hashWithSHA256(string input)
-        {
-            // convert input string to byte array
-            byte[] byteInput = Encoding.Default.GetBytes(input);
-            // create a hasher object from System.Security.Cryptography
-            SHA256CryptoServiceProvider sha256Hasher = new SHA256CryptoServiceProvider();
-            // hash and save the resulting byte array
-            byte[] result = sha256Hasher.ComputeHash(byteInput);
-
-            return result;
-        }
-
         public void Reset()
         {
             textBox_Username.Text = "";
@@ -71,13 +59,37 @@ namespace CS432_Client
                     textBox_Status.AppendText("Connected to server\n");
 
                     byte[] sha256 = hashWithSHA256(textBox_Password.Text);
-                    byte[] newsha256 = sha256.Take(16).ToArray();
-                    byte[] bytes = Encoding.ASCII.GetBytes(str);
-                    byte[] sendbytes = newsha256.Concat(bytes).ToArray();
-                    clientSocket.Send(sendbytes);
+                    byte[] halfsha256 = sha256.Take(16).ToArray();
+                    byte[] userbytes = Encoding.ASCII.GetBytes(str);
+                    byte[] sendbytes = halfsha256.Concat(userbytes).ToArray();
 
+                    string key;
+                    using (System.IO.StreamReader fileReader =
+                    new System.IO.StreamReader(@"C:\Users\Vixie\Documents\Visual Studio 2012\Projects\repos\CS432_Client\server_enc_dec_pub.txt"))
+                    {
+                        key = fileReader.ReadLine();
+                    }
+                    string sample = Encoding.UTF8.GetString(sendbytes, 0, sendbytes.Length);
+                    byte[] encryptedRSA = encryptWithRSA(sample, 3072, key);
+                    clientSocket.Send(encryptedRSA);
+
+                    /*
+                    string a = generateHexStringFromByteArray(encryptedRSA);
+                    string chestr = Encoding.UTF8.GetString(encryptedRSA, 0, encryptedRSA.Length);
+                    byte[] decryptedRSA = decryptWithRSA(chestr, 3072, key);
+                    string b = generateHexStringFromByteArray(decryptedRSA);
+                    int x=10;
+                    if (a == b)
+                    {
+                        x = 1;
+                    }
+                    else
+                        x = 0;
+                    */
+                             
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
                     receiveThread.Start();
+                    
 
                 }
                 catch
@@ -143,13 +155,6 @@ namespace CS432_Client
             }
         }
 
-        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            connected = false;
-            terminating = true;
-            Environment.Exit(0);
-        }
-
         private void SendBtn_Click(object sender, EventArgs e)
         {
             if (connected)
@@ -160,6 +165,85 @@ namespace CS432_Client
                 byte[] denemebytes = Encoding.ASCII.GetBytes(newstr);
                 clientSocket.Send(denemebytes);
             }
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            connected = false;
+            terminating = true;
+            Environment.Exit(0);
+        }
+
+        static byte[] decryptWithRSA(string input, int algoLength, string xmlStringKey)
+        {
+            // convert input string to byte array
+            byte[] byteInput = Encoding.Default.GetBytes(input);
+            // create RSA object from System.Security.Cryptography
+            RSACryptoServiceProvider rsaObject = new RSACryptoServiceProvider(algoLength);
+            // set RSA object with xml string
+            rsaObject.FromXmlString(xmlStringKey);
+            byte[] result = null;
+
+            try
+            {
+                result = rsaObject.Decrypt(byteInput, true);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+
+            return result;
+        }
+
+        static byte[] encryptWithRSA(string input, int algoLength, string xmlStringKey)
+        {
+            // convert input string to byte array
+            byte[] byteInput = Encoding.Default.GetBytes(input);
+            // create RSA object from System.Security.Cryptography
+            RSACryptoServiceProvider rsaObject = new RSACryptoServiceProvider(algoLength);
+            // set RSA object with xml string
+            rsaObject.FromXmlString(xmlStringKey);
+            byte[] result = null;
+
+            try
+            {
+                //true flag is set to perform direct RSA encryption using OAEP padding
+                result = rsaObject.Encrypt(byteInput, true);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+
+            return result;
+        }
+
+        static byte[] hashWithSHA256(string input)
+        {
+            // convert input string to byte array
+            byte[] byteInput = Encoding.Default.GetBytes(input);
+            // create a hasher object from System.Security.Cryptography
+            SHA256CryptoServiceProvider sha256Hasher = new SHA256CryptoServiceProvider();
+            // hash and save the resulting byte array
+            byte[] result = sha256Hasher.ComputeHash(byteInput);
+
+            return result;
+        }
+
+        public static string generateHexStringFromByteArray(byte[] input)
+        {
+            string hexString = BitConverter.ToString(input);
+            return hexString.Replace("-", "");
+        }
+
+        public static byte[] hexStringToByteArray(string hex)
+        {
+            int numberChars = hex.Length;
+            byte[] bytes = new byte[numberChars / 2];
+            for (int i = 0; i < numberChars; i += 2)
+                bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
+            return bytes;
         }
     }
 }

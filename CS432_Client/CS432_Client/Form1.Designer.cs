@@ -123,7 +123,7 @@
             this.textBox_Status.Multiline = true;
             this.textBox_Status.Name = "textBox_Status";
             this.textBox_Status.ReadOnly = true;
-            this.textBox_Status.Size = new System.Drawing.Size(142, 220);
+            this.textBox_Status.Size = new System.Drawing.Size(142, 242);
             this.textBox_Status.TabIndex = 9;
             // 
             // textBox_deneme
