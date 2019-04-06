@@ -53,7 +53,7 @@ namespace CS432_Client
                 {
                     string str = textBox_Username.Text;
                     clientSocket.Connect(IP, port);
-                    ConnectBtn.Text = "Disconnect";
+                    EnrollBtn.Text = "Disconnect";
                     connected = true;
                     textBox_Status.AppendText("Connected to server\n");
 
@@ -76,10 +76,11 @@ namespace CS432_Client
                         string mes = Encoding.UTF8.GetString(sendbytes, 0, sendbytes.Length);
                         byte[] encryptedRSA = encryptWithRSA(mes, 3072, key);
                         clientSocket.Send(encryptedRSA);
+
                     }
                     catch
                     {
-                        MessageBox.Show(this, "RSA Encryption Failed", "Failure", MessageBoxButtons.OK);
+                        MessageBox.Show(this, "(Exception)RSA Encryption Failed", "Failure", MessageBoxButtons.OK);
                     }
 
                    
@@ -87,8 +88,13 @@ namespace CS432_Client
 
                     try
                     {
-                        byte[] buffer = new Byte[1024];
-                        clientSocket.Receive(buffer);
+                        byte[] buffer = new Byte[2048];
+                        int recievedbytes = clientSocket.Receive(buffer);
+                        if (recievedbytes == 0)
+                        {
+                            MessageBox.Show(this, "Error during verification.", "Failure", MessageBoxButtons.OK);
+                        }
+                        buffer = buffer.Take(recievedbytes).ToArray();
                         byte[] sign = buffer.Take(384).ToArray();
                         byte[] message = buffer.Skip(384).Take(buffer.Length - 384).ToArray();
                         string messagefirstParam = Encoding.UTF8.GetString(message, 0, message.Length);
@@ -101,16 +107,26 @@ namespace CS432_Client
                         }
                         if (verifyWithRSA(messagefirstParam, 3072, verKey, sign))
                         {
-                            //enroll
+                            textBox_Status.Text = "Verification successful.";
+                            if (messagefirstParam == "success")
+                            {
+                                MessageBox.Show(this, "Successfully enrolled to the system.", "Failure", MessageBoxButtons.OK);
+                            }
+                            else 
+                            {
+                                MessageBox.Show(this, "Couldn't enroll, try another username.", "Failure", MessageBoxButtons.OK);
+                                return;
+                            }
                         }
                         else
                         {
+                            textBox_Status.Text = "Verify failed.";
                             return;
                         }
                     }
                     catch
                     {
-                        MessageBox.Show(this, "Sign Verification Failed", "Failure", MessageBoxButtons.OK);
+                        MessageBox.Show(this, "(Exception)Sign Verification Failed", "Failure", MessageBoxButtons.OK);
                     }
                     
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
@@ -138,10 +154,10 @@ namespace CS432_Client
             connected = false;
             clientSocket.Disconnect(false);
             clientSocket.Close();
-            ConnectBtn.Text = "Connect";
+            EnrollBtn.Text = "Connect";
         }
                 
-        private void ConnectBtn_Click(object sender, EventArgs e)
+        private void EnrollBtn_Click(object sender, EventArgs e)
         {
             if (!connected)
             {
@@ -152,6 +168,11 @@ namespace CS432_Client
                 stopClient();
             }
         }
+        private void LoginBtn_Click(object sender, EventArgs e)
+        {
+            string userstr = textBox_Username.Text;
+
+        }
 
         private void Receive()
         {
@@ -159,7 +180,7 @@ namespace CS432_Client
             {
                 try
                 {
-                    Byte[] buffer = new Byte[64];
+                    Byte[] buffer = new Byte[2048];
                     clientSocket.Receive(buffer);
 
                     string incomingMessage = Encoding.Default.GetString(buffer);
@@ -177,18 +198,6 @@ namespace CS432_Client
                     clientSocket.Close();
                     connected = false;
                 }
-            }
-        }
-
-        private void SendBtn_Click(object sender, EventArgs e)
-        {
-            if (connected)
-            {
-                string str1 = textBox_deneme.Text;
-                string str2 = "m|";
-                string newstr = str2 + str1;
-                byte[] denemebytes = Encoding.ASCII.GetBytes(newstr);
-                clientSocket.Send(denemebytes);
             }
         }
 
