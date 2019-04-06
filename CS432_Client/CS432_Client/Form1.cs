@@ -57,46 +57,64 @@ namespace CS432_Client
                     connected = true;
                     textBox_Status.AppendText("Connected to server\n");
 
-                    byte[] sha256 = hashWithSHA256(textBox_Password.Text);
-                    byte[] halfsha256 = sha256.Take(16).ToArray();
-                    byte[] userbytes = Encoding.ASCII.GetBytes(str);
-                    byte[] sendbytes = halfsha256.Concat(userbytes).ToArray();
 
-                    string key;
-                    using (System.IO.StreamReader fileReader =
-                    new System.IO.StreamReader(@"C:\Users\Vixie\Documents\Visual Studio 2012\Projects\repos\CS432_Client\server_enc_dec_pub.txt"))
-                    {
-                        key = fileReader.ReadLine();
-                    }
-                    string mes = Encoding.UTF8.GetString(sendbytes, 0, sendbytes.Length);
-                    byte[] encryptedRSA = encryptWithRSA(mes, 3072, key);
-                    clientSocket.Send(encryptedRSA);
+                    //RSA ENCRYPTION
 
-                    byte[] buffer = new Byte[1024];
-                    clientSocket.Receive(buffer);
-                    byte[] sign = buffer.Take(384).ToArray();
-                    byte[] message = buffer.Skip(384).Take(buffer.Length-384).ToArray();
-                    string messadfPar = Encoding.UTF8.GetString(message, 0, sendbytes.Length);
+                    try
+                    {
+                        byte[] sha256 = hashWithSHA256(textBox_Password.Text);
+                        byte[] halfsha256 = sha256.Take(16).ToArray();
+                        byte[] userbytes = Encoding.ASCII.GetBytes(str);
+                        byte[] sendbytes = halfsha256.Concat(userbytes).ToArray();
 
-                    string verKey;
-                    using (System.IO.StreamReader fileReader =
-                    new System.IO.StreamReader(@"C:\Users\Vixie\Documents\Visual Studio 2012\Projects\repos\CS432_Client\server_signing_verification_pub.txt"))
-                    {
-                        verKey = fileReader.ReadLine();
+                        string key;
+                        using (System.IO.StreamReader fileReader =
+                        new System.IO.StreamReader(@"C:\Users\Vixie\Documents\Visual Studio 2012\Projects\repos\CS432_Client\server_enc_dec_pub.txt"))
+                        {
+                            key = fileReader.ReadLine();
+                        }
+                        string mes = Encoding.UTF8.GetString(sendbytes, 0, sendbytes.Length);
+                        byte[] encryptedRSA = encryptWithRSA(mes, 3072, key);
+                        clientSocket.Send(encryptedRSA);
                     }
-                    if (verifyWithRSA(messadfPar, 3072, verKey, sign))
+                    catch
                     {
-                        //enroll
+                        MessageBox.Show(this, "RSA Encryption Failed", "Failure", MessageBoxButtons.OK);
                     }
-                    else
+
+                   
+                   //SIGN VERIFICATION
+
+                    try
                     {
-                        return;
+                        byte[] buffer = new Byte[1024];
+                        clientSocket.Receive(buffer);
+                        byte[] sign = buffer.Take(384).ToArray();
+                        byte[] message = buffer.Skip(384).Take(buffer.Length - 384).ToArray();
+                        string messagefirstParam = Encoding.UTF8.GetString(message, 0, message.Length);
+
+                        string verKey;
+                        using (System.IO.StreamReader fileReader =
+                        new System.IO.StreamReader(@"C:\Users\Vixie\Documents\Visual Studio 2012\Projects\repos\CS432_Client\server_signing_verification_pub.txt"))
+                        {
+                            verKey = fileReader.ReadLine();
+                        }
+                        if (verifyWithRSA(messagefirstParam, 3072, verKey, sign))
+                        {
+                            //enroll
+                        }
+                        else
+                        {
+                            return;
+                        }
                     }
-                  
+                    catch
+                    {
+                        MessageBox.Show(this, "Sign Verification Failed", "Failure", MessageBoxButtons.OK);
+                    }
+                    
                     Thread receiveThread = new Thread(new ThreadStart(Receive));
                     receiveThread.Start();
-                    
-
                 }
                 catch
                 {
@@ -180,7 +198,30 @@ namespace CS432_Client
             terminating = true;
             Environment.Exit(0);
         }
-        
+
+        static byte[] decryptWithRSA(string input, int algoLength, string xmlStringKey)
+        {
+            // convert input string to byte array
+            byte[] byteInput = Encoding.Default.GetBytes(input);
+            // create RSA object from System.Security.Cryptography
+            RSACryptoServiceProvider rsaObject = new RSACryptoServiceProvider(algoLength);
+            // set RSA object with xml string
+            rsaObject.FromXmlString(xmlStringKey);
+            byte[] result = null;
+
+            try
+            {
+                result = rsaObject.Decrypt(byteInput, true);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+
+            return result;
+        }
+
+
         static bool verifyWithRSA(string input, int algoLength, string xmlString, byte[] signature)
         {
             // convert input string to byte array
