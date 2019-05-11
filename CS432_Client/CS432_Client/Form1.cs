@@ -17,10 +17,15 @@ namespace CS432_Client
     public partial class Form1 : Form
     {
         // Class fields
-        bool terminating = false;
         bool connected = false;
         Socket clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         String serverRSApublicKey;
+        String clientUsername;
+        String clientPassword;
+
+        String verificationKey;
+
+        bool isAuthenticated = false;
 
         // Class Constructors
         public Form1()
@@ -77,75 +82,121 @@ namespace CS432_Client
                 new System.IO.StreamReader(@"C:\\Users\\oranc\\Desktop\\Course stuff\\cs432 prroject 1\\server_enc_dec_pub.txt"))
                 {
                     serverRSApublicKey = fileReader.ReadLine();
+                    log("Encryption keys are read from file system");
+                }
+
+                using (System.IO.StreamReader fileReader =
+                new System.IO.StreamReader(@"C:\\Users\\oranc\\Desktop\\Course stuff\\cs432 prroject 1\\server_signing_verification_pub.txt"))
+                {
+                    verificationKey = fileReader.ReadLine();
+                    log("Verification keys are read from file system");
                 }
             }
             catch
             {
-                MessageBox.Show(this, "Couldn't open the file", "Failure", MessageBoxButtons.OK);
+                MessageBox.Show(this, "Error reading the key file", "Failure", MessageBoxButtons.OK);
             }
+        }
+
+        private void log(String message)
+        {
+            if (InvokeRequired)
+                Invoke(new Action<string>(textBox_Status.AppendText), message + "\n");
+            else
+                textBox_Status.AppendText(message + "\n");
         }
 
         // Networking
-        private void initiateServerConnection(String ip, Int32 port)
+        private void parseMessage(String message)
         {
-            clientSocket.Connect(ip, port);
-            EnrollBtn.Text = "Disconnect";
-            connected = true;
-            textBox_Status.AppendText("Connected to server\n");
+            char flag = message[0];
+            String content = message.Substring(2);
+
+            switch (flag)
+            {
+                case 'm': // incoming message
+                    break;
+                case 'd': // disconnection request
+                    destroyServerConnection();
+                    break;
+                case 'a': // authentication challenge
+                    solveChallenge(content);
+                    break;
+                case 'b': // authentication acknowledgment
+                    acknowledgeAuth(content);
+                    break;
+                case 'e': // enrollment verification/failure
+                    finalizeEnrollment(content);
+                    break;
+            }
         }
 
-        private void enrollToServer(String username, String password)
+        private void destroyServerConnection()
         {
-            byte[] sha256 = hashWithSHA256(textBox_Password.Text);
-            byte[] halfsha256 = sha256.Take(16).ToArray();
-            byte[] userbytes = Encoding.Default.GetBytes(username);
-            byte[] sendbytes = halfsha256.Concat(userbytes).ToArray();
-
-            string mes = Encoding.Default.GetString(sendbytes, 0, sendbytes.Length);
-            byte[] encryptedRSA = encryptWithRSA(mes, 3072, serverRSApublicKey);
-
-            byte[] finalBytes = Encoding.Default.GetBytes("e|").Concat(encryptedRSA).ToArray();
-            clientSocket.Send(finalBytes);
+            connected = false;
+            transmitClear(null, "d");
+            clientSocket.Disconnect(true);
+            log("Disconnected from server");
         }
 
-        private bool enrollmentVerified()
+        private void transmitClear(Byte[] message, String flag)
         {
-            byte[] buffer = new Byte[2048];
-            int recievedbytes = clientSocket.Receive(buffer);
-            if (recievedbytes == 0)
+            Byte[] transmissionData = Encoding.Default.GetBytes(flag + "|");
+            if (message != null)
             {
-                MessageBox.Show(this, "Error during verification.", "Failure", MessageBoxButtons.OK);
-            }
-            buffer = buffer.Take(recievedbytes).ToArray();
-            byte[] sign = buffer.Take(384).ToArray();
-            byte[] message = buffer.Skip(384).ToArray();
-            string messagefirstParam = Encoding.UTF8.GetString(message, 0, message.Length);
-
-            string verKey;
-            using (System.IO.StreamReader fileReader =
-            new System.IO.StreamReader(@"C:\\Users\\oranc\\Desktop\\Course stuff\\cs432 prroject 1\\server_signing_verification_pub.txt"))
-            {
-                verKey = fileReader.ReadLine();
-            }
-            if (verifyWithRSA(messagefirstParam, 3072, verKey, sign))
-            {
-                if (messagefirstParam == "success")
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
+                clientSocket.Send(transmissionData.Concat(message).ToArray());
             }
             else
             {
-                MessageBox.Show(this, "Server signature verification failed", "Failure", MessageBoxButtons.OK);
-                return false;
+                clientSocket.Send(transmissionData);
             }
         }
 
-        private void startClient()
+        private void createServerConnection(String ip, Int32 port)
+        {
+            clientSocket.Connect(ip, port);
+            connected = true;
+            log("Connected to server");
+        }
+
+        //private bool enrollmentVerified()
+        //{
+        //    byte[] buffer = new Byte[2048];
+        //    int recievedbytes = clientSocket.Receive(buffer);
+        //    if (recievedbytes == 0)
+        //    {
+        //        MessageBox.Show(this, "Error during verification.", "Failure", MessageBoxButtons.OK);
+        //    }
+        //    buffer = buffer.Take(recievedbytes).ToArray();
+        //    byte[] sign = buffer.Take(384).ToArray();
+        //    byte[] message = buffer.Skip(384).ToArray();
+        //    string messagefirstParam = Encoding.UTF8.GetString(message, 0, message.Length);
+
+        //    string verKey;
+        //    using (System.IO.StreamReader fileReader =
+        //    new System.IO.StreamReader(@"C:\\Users\\oranc\\Desktop\\Course stuff\\cs432 prroject 1\\server_signing_verification_pub.txt"))
+        //    {
+        //        verKey = fileReader.ReadLine();
+        //    }
+        //    if (verifyWithRSA(messagefirstParam, 3072, verKey, sign))
+        //    {
+        //        if (messagefirstParam == "success")
+        //        {
+        //            return true;
+        //        }
+        //        else
+        //        {
+        //            return false;
+        //        }
+        //    }
+        //    else
+        //    {
+        //        MessageBox.Show(this, "Server signature verification failed", "Failure", MessageBoxButtons.OK);
+        //        return false;
+        //    }
+        //}
+
+        private void enrollToServer()
         {
             try
             {
@@ -156,113 +207,160 @@ namespace CS432_Client
                 Tuple<String, String, String, Int32> fieldValues = validateAndGetInputs();
 
                 username = fieldValues.Item1;
+                clientUsername = username;
                 password = fieldValues.Item2;
+                clientPassword = password;
                 ip = fieldValues.Item3;
                 port = fieldValues.Item4;
 
-                // 2 - form socket connection to server for enrollment
-                initiateServerConnection(ip, port);
+                createServerConnection(ip, port);
 
-                // 3 - enrollment
-                enrollToServer(username, password);
+                // 2 - enrollment
+                // prepare the enrollment data
+                byte[] passwordHash = hashWithSHA256(clientPassword).Skip(16).ToArray();
+                byte[] encodedUsername = Encoding.Default.GetBytes(username);
+                byte[] sendBytes = passwordHash.Concat(encodedUsername).ToArray();
 
-                // 4 - server enrollment response & signature verification
-                if (enrollmentVerified())
-                {
-                    textBox_Status.AppendText("Successfully enrolled to server");
-                }
-                else
-                {
-                    textBox_Status.AppendText("Enrollment to server failed");
-                }
+                // encrypt the data
+                string mes = Encoding.Default.GetString(sendBytes, 0, sendBytes.Length);
+                byte[] encryptedRSA = encryptWithRSA3072(mes);
+
+                // send the data & listen to incoming transmissions
+                Thread serverListener = new Thread(new ThreadStart(listenServer));
+                serverListener.IsBackground = true;
+                serverListener.Start();
+
+                transmitClear(encryptedRSA, "e");
             }
             catch
             {
-                MessageBox.Show("Something went wrong!");
+                MessageBox.Show("Exception catched during enrollment request");
             }
         }
 
-        private void stopClient()
+        private void finalizeEnrollment(String message)
         {
-            connected = false;
-            clientSocket.Disconnect(false);
-            clientSocket.Close();
-            EnrollBtn.Text = "Connect";
+            // parse the message
+            Byte[] rawMessage = Encoding.Default.GetBytes(message);
+            Byte[] signature = rawMessage.Take(384).ToArray();
+            String status = Encoding.Default.GetString(rawMessage.Skip(384).ToArray());
+
+            // verify the signature
+            if (verifyWithRSA(status, 3072, verificationKey, signature))
+            {
+                if (status == "success")
+                {
+                    log("Successfully enrolled to server");
+                }
+                else if (status == "error")
+                {
+                    log("Username already exists");
+                }
+                else
+                {
+                    log("Unknown signed message received");
+                }
+            }
+            else
+            {
+                MessageBox.Show(this, "Server signature verification failed", "Failure", MessageBoxButtons.OK);
+            }
+            destroyServerConnection();
+        }
+        
+        private void sendAuthenticationRequest()
+        {
+            transmitClear(Encoding.Default.GetBytes(clientUsername), "a");
         }
 
-        private void Receive()
+        private void listenServer()
         {
             while (connected)
             {
                 try
                 {
-                    Byte[] buffer = new Byte[2048];
-                    clientSocket.Receive(buffer);
+                    Byte[] buffer = new Byte[8192];
+                    int receivedBytes = clientSocket.Receive(buffer);
+                    buffer = buffer.Take(receivedBytes).ToArray();
 
-                    string incomingMessage = Encoding.Default.GetString(buffer);
-                    incomingMessage = incomingMessage.Substring(0, incomingMessage.IndexOf("\0"));
-                    textBox_Status.AppendText(incomingMessage + "\n");
+                    String decodedMessage = (Encoding.Default.GetString(buffer));
+
+                    parseMessage(decodedMessage);
                 }
-                catch
+                catch (Exception e)
                 {
-
-                    if (!terminating)
-                    {
-                        textBox_Status.AppendText("Disconnected from server\n");
-                    }
-                    clientSocket.Disconnect(false);
-                    clientSocket.Close();
-                    connected = false;
+                    MessageBox.Show(this, e.Message, "Failure", MessageBoxButtons.OK);
                 }
             }
+            log("Stopped listening to server");
         }
-        // GUI Events
-        private void EnrollBtn_Click(object sender, EventArgs e)
+
+        private void solveChallenge(String challenge)
         {
-            if (!connected)
+            Byte[] upperHashPw = hashWithSHA256(clientPassword).Skip(16).ToArray();
+            Byte[] challengeResponse = applyHMACwithSHA256(challenge, upperHashPw);
+            byte[] finalBytes = Encoding.Default.GetBytes("h|").Concat(challengeResponse).ToArray();
+            clientSocket.Send(finalBytes);
+        }
+
+        private void acknowledgeAuth(String message)
+        {
+            if (message == "ack_positive")
             {
-                startClient();
+                log("Successfully authenticated to the server");
+                isAuthenticated = true;
+            }
+            else if (message == "ack_negative")
+            {
+                log("Wrong password!");
             }
             else
             {
-                stopClient();
+                MessageBox.Show(this, "Unknown token received from server", "Failure", MessageBoxButtons.OK);
             }
+        }
+
+        // GUI Events
+        private void EnrollBtn_Click(object sender, EventArgs e)
+        {
+            enrollToServer();
         }
 
         private void LoginBtn_Click(object sender, EventArgs e)
         {
             try
             {
-                //SEND USERNAME WITH AUTHENTICATOR
-                string userstr = textBox_Username.Text;
-                string autcator = "a|";
-                string fstr = autcator + userstr;
-                byte[] bytes = Encoding.ASCII.GetBytes(fstr);
-                clientSocket.Send(bytes);
+                // 1 - create connection to server
+                String username, password, ip;
+                Int32 port;
 
-                // 128 BIT NUMBER RECEIVE & SEND
-                byte[] buffer128 = new Byte[2048];
-                int recievedbytes128 = clientSocket.Receive(buffer128);
-                if (recievedbytes128 == 0)
-                {
-                    MessageBox.Show(this, "Error with getting the 128-bit number.", "Failure", MessageBoxButtons.OK);
-                }
-                byte[] sha256OfPass = hashWithSHA256(textBox_Password.Text);
-                byte[] upperhalfsha256 = sha256OfPass.Skip(16).ToArray();
-                string hashstrOf128 = Encoding.UTF8.GetString(buffer128, 0, buffer128.Length);
-                byte[] hmacsha256 = applyHMACwithSHA256(hashstrOf128, upperhalfsha256);
-                clientSocket.Send(hmacsha256);
+                Tuple<String, String, String, Int32> fieldValues = validateAndGetInputs();
+
+                username = fieldValues.Item1;
+                clientUsername = username;
+                password = fieldValues.Item2;
+                clientPassword = password;
+                ip = fieldValues.Item3;
+                port = fieldValues.Item4;
+
+                createServerConnection(ip, port);
+
+                Thread serverListener = new Thread(new ThreadStart(listenServer));
+                serverListener.IsBackground = true;
+                serverListener.Start();
+
+                // 2 - send authentication request
+                sendAuthenticationRequest();
             }
-            catch
+            catch (Exception exc)
             {
-                MessageBox.Show(this, "Something wrong with authentication", "Failure", MessageBoxButtons.OK);
+                MessageBox.Show(this, exc.Message, "Failure", MessageBoxButtons.OK);
             }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            connected = false;
-            terminating = true;
+            destroyServerConnection();
             Environment.Exit(0);
         }
 
@@ -301,7 +399,7 @@ namespace CS432_Client
             return result;
         }
 
-        static bool verifyWithRSA(string input, int algoLength, string xmlString, byte[] signature)
+        bool verifyWithRSA(string input, int algoLength, string xmlString, byte[] signature)
         {
             // convert input string to byte array
             byte[] byteInput = Encoding.Default.GetBytes(input);
@@ -317,30 +415,31 @@ namespace CS432_Client
             }
             catch (Exception e)
             {
-                Console.WriteLine(e.Message);
+                MessageBox.Show(this, e.Message, "Failure", MessageBoxButtons.OK);
             }
 
             return result;
         }
 
-        static byte[] encryptWithRSA(string input, int algoLength, string xmlStringKey)
+        byte[] encryptWithRSA3072(string input)
         {
             // convert input string to byte array
             byte[] byteInput = Encoding.Default.GetBytes(input);
             // create RSA object from System.Security.Cryptography
-            RSACryptoServiceProvider rsaObject = new RSACryptoServiceProvider(algoLength);
+            RSACryptoServiceProvider rsaObject = new RSACryptoServiceProvider(3072);
             // set RSA object with xml string
-            rsaObject.FromXmlString(xmlStringKey);
+
             byte[] result = null;
 
             try
             {
+                rsaObject.FromXmlString(serverRSApublicKey);
                 //true flag is set to perform direct RSA encryption using OAEP padding
                 result = rsaObject.Encrypt(byteInput, true);
             }
             catch (Exception e)
             {
-                Console.WriteLine(e.Message);
+                MessageBox.Show(this, e.Message, "Failure", MessageBoxButtons.OK);
             }
 
             return result;
@@ -359,6 +458,3 @@ namespace CS432_Client
         }
     }
 }
-
-
-
