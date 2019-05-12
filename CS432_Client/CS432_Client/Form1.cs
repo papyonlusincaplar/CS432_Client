@@ -18,12 +18,17 @@ namespace CS432_Client
     {
         // Class fields
         bool connected = false;
-        Socket clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        Socket clientSocket;
         String serverRSApublicKey;
         String clientUsername;
         String clientPassword;
 
         String verificationKey;
+        Byte[] authChallenge = null;
+        Byte[] upperHashPw = null;
+
+        Byte[] authenticationKey = null;
+        Byte[] encryptionKey = null;
 
         bool isAuthenticated = false;
 
@@ -33,6 +38,7 @@ namespace CS432_Client
             Control.CheckForIllegalCrossThreadCalls = false;
             this.FormClosing += new FormClosingEventHandler(Form1_FormClosing);
             InitializeComponent();
+            button2.Enabled = false;
             readKey();
         }
 
@@ -106,6 +112,17 @@ namespace CS432_Client
                 textBox_Status.AppendText(message + "\n");
         }
 
+        private void handleSuccessfulAuth(String keys)
+        {
+            isAuthenticated = true;
+
+            Byte[] decryptedKeys = decryptWithAES128(keys, upperHashPw, authChallenge);
+            encryptionKey = decryptedKeys.Take(16).ToArray();
+            authenticationKey = decryptedKeys.Skip(16).ToArray();
+            log("Session keys are successfully received and decrypted");
+
+            button2.Enabled = true;
+        }
         // Networking
         private void parseMessage(String message)
         {
@@ -135,12 +152,17 @@ namespace CS432_Client
         {
             connected = false;
             transmitClear(null, "d");
-            clientSocket.Disconnect(true);
+            clientSocket.Close();
             log("Disconnected from server");
         }
 
         private void transmitClear(Byte[] message, String flag)
         {
+            if (!connected)
+            {
+                return;
+            }
+
             Byte[] transmissionData = Encoding.Default.GetBytes(flag + "|");
             if (message != null)
             {
@@ -154,47 +176,11 @@ namespace CS432_Client
 
         private void createServerConnection(String ip, Int32 port)
         {
+            clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             clientSocket.Connect(ip, port);
             connected = true;
             log("Connected to server");
         }
-
-        //private bool enrollmentVerified()
-        //{
-        //    byte[] buffer = new Byte[2048];
-        //    int recievedbytes = clientSocket.Receive(buffer);
-        //    if (recievedbytes == 0)
-        //    {
-        //        MessageBox.Show(this, "Error during verification.", "Failure", MessageBoxButtons.OK);
-        //    }
-        //    buffer = buffer.Take(recievedbytes).ToArray();
-        //    byte[] sign = buffer.Take(384).ToArray();
-        //    byte[] message = buffer.Skip(384).ToArray();
-        //    string messagefirstParam = Encoding.UTF8.GetString(message, 0, message.Length);
-
-        //    string verKey;
-        //    using (System.IO.StreamReader fileReader =
-        //    new System.IO.StreamReader(@"C:\\Users\\oranc\\Desktop\\Course stuff\\cs432 prroject 1\\server_signing_verification_pub.txt"))
-        //    {
-        //        verKey = fileReader.ReadLine();
-        //    }
-        //    if (verifyWithRSA(messagefirstParam, 3072, verKey, sign))
-        //    {
-        //        if (messagefirstParam == "success")
-        //        {
-        //            return true;
-        //        }
-        //        else
-        //        {
-        //            return false;
-        //        }
-        //    }
-        //    else
-        //    {
-        //        MessageBox.Show(this, "Server signature verification failed", "Failure", MessageBoxButtons.OK);
-        //        return false;
-        //    }
-        //}
 
         private void enrollToServer()
         {
@@ -232,9 +218,9 @@ namespace CS432_Client
 
                 transmitClear(encryptedRSA, "e");
             }
-            catch
+            catch (Exception e)
             {
-                MessageBox.Show("Exception catched during enrollment request");
+                MessageBox.Show(e.Message);
             }
         }
 
@@ -297,7 +283,9 @@ namespace CS432_Client
 
         private void solveChallenge(String challenge)
         {
-            Byte[] upperHashPw = hashWithSHA256(clientPassword).Skip(16).ToArray();
+            authChallenge = Encoding.Default.GetBytes(challenge);
+
+            upperHashPw = hashWithSHA256(clientPassword).Skip(16).ToArray();
             Byte[] challengeResponse = applyHMACwithSHA256(challenge, upperHashPw);
             byte[] finalBytes = Encoding.Default.GetBytes("h|").Concat(challengeResponse).ToArray();
             clientSocket.Send(finalBytes);
@@ -305,18 +293,31 @@ namespace CS432_Client
 
         private void acknowledgeAuth(String message)
         {
-            if (message == "ack_positive")
+            // parse the message
+            Byte[] rawMessage = Encoding.Default.GetBytes(message);
+            Byte[] signature = rawMessage.Take(384).ToArray();
+            String statusAndKeys = Encoding.Default.GetString(rawMessage.Skip(384).ToArray());
+            String status = statusAndKeys.Substring(0, 2);
+
+            if (verifyWithRSA(statusAndKeys, 3072, verificationKey, signature))
             {
-                log("Successfully authenticated to the server");
-                isAuthenticated = true;
-            }
-            else if (message == "ack_negative")
-            {
-                log("Wrong password!");
+                if (status == "OK")
+                {
+                    log("Authentication successful");
+                    handleSuccessfulAuth(statusAndKeys.Substring(2).ToString());
+                }
+                else if (status == "NO")
+                {
+                    log("Authentication failed");
+                }
+                else
+                {
+                    log("Unknown signed authentication response");
+                }
             }
             else
             {
-                MessageBox.Show(this, "Unknown token received from server", "Failure", MessageBoxButtons.OK);
+                MessageBox.Show(this, "Server signature verification failed", "Failure", MessageBoxButtons.OK);
             }
         }
 
@@ -345,11 +346,12 @@ namespace CS432_Client
 
                 createServerConnection(ip, port);
 
+                // 2 - start listening to server with a new thread
                 Thread serverListener = new Thread(new ThreadStart(listenServer));
                 serverListener.IsBackground = true;
                 serverListener.Start();
 
-                // 2 - send authentication request
+                // 3 - send authentication request
                 sendAuthenticationRequest();
             }
             catch (Exception exc)
@@ -445,6 +447,34 @@ namespace CS432_Client
             return result;
         }
 
+        static byte[] decryptWithAES128(String input, byte[] key, byte[] IV)
+        {
+            byte[] byteInput = Encoding.Default.GetBytes(input);
+
+            // create AES object from System.Security.Cryptography
+            RijndaelManaged aesObject = new RijndaelManaged();
+            // since we want to use AES-128
+            aesObject.KeySize = 128;
+            // block size of AES is 128 bits
+            aesObject.BlockSize = 128;
+            // mode -> CipherMode.*
+            aesObject.Mode = CipherMode.CFB;
+            // feedback size should be equal to block size
+            // aesObject.FeedbackSize = 128;
+            // set the key
+            aesObject.Key = key;
+            // set the IV
+            aesObject.IV = IV;
+
+            // create an encryptor with the settings provided
+            ICryptoTransform decryptor = aesObject.CreateDecryptor();
+            byte[] result = null;
+
+            result = decryptor.TransformFinalBlock(byteInput, 0, byteInput.Length);
+
+            return result;
+        }
+
         static byte[] hashWithSHA256(string input)
         {
             // convert input string to byte array
@@ -455,6 +485,16 @@ namespace CS432_Client
             byte[] result = sha256Hasher.ComputeHash(byteInput);
 
             return result;
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            destroyServerConnection();
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            
         }
     }
 }
